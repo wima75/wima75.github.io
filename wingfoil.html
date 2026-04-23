@@ -1,1 +1,732 @@
-wingfoil
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Wingfoil GPX Analyzer</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Farben */
+    --bg-0: #0a0e1a;
+    --bg-1: #111827;
+    --bg-2: #1a2030;
+    --border: rgba(255,255,255,0.08);
+    --text: #e5e7eb;
+    --muted: #a0aabe;
+    --accent: #228bee;
+    --accent-2: #a78bfa;
+    --good: #34d399;
+    --bad: #f14242;
+
+    /* Radien */
+    --r-sm: 10px;
+    --r-md: 12px;
+    --r-lg: 18px;
+    --r-pill: 999px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+
+  body {
+    font-family: Inter, system-ui, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(1200px 600px at 10% -10%, rgba(167,139,250,0.15), transparent 60%),
+      radial-gradient(1000px 500px at 110% 10%, rgba(34,139,238,0.18), transparent 60%),
+      linear-gradient(180deg, var(--bg-0), #05070d);
+    min-height: 100vh;
+    padding: 32px clamp(16px, 4vw, 48px);
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  header .brand { justify-self: start; }
+  header .tag   { justify-self: end; }
+
+  .brand .logo-img {
+    width: 42px; height: 42px;
+    border-radius: var(--r-sm);
+    object-fit: cover;
+    box-shadow: 0 8px 24px rgba(34,139,238,0.35);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand .brand-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+  }
+
+  .brand .brand-text strong {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .brand .brand-text small {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .brand small {
+    display: block;
+    font-weight: 500;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .tag {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    background: rgba(255,255,255,0.03);
+  }
+
+  /* ---------- Card Basis ---------- */
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+
+  /* ---------- Drop Zone ---------- */
+  #drop {
+    justify-self: center;
+    max-width: 480px;
+    min-width: 240px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    cursor: pointer;
+    border: 2px dashed rgba(255,255,255,0.15);
+    border-radius: var(--r-md);
+    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+    transition: border-color .2s ease, transform .2s ease, background .2s ease, box-shadow .2s ease;
+  }
+  #drop:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+  #drop:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(34,139,238,0.3);
+  }
+  #drop.hover {
+    border-color: var(--good);
+    background: rgba(52,211,153,0.08);
+    box-shadow: 0 0 0 4px rgba(52,211,153,0.12);
+  }
+  #drop .drop-icon {
+    font-size: 22px;
+    width: 38px; height: 38px;
+    display: grid; place-items: center;
+    border-radius: var(--r-sm);
+    background: linear-gradient(135deg, rgba(34,139,238,0.2), rgba(167,139,250,0.2));
+    flex-shrink: 0;
+  }
+  #drop .drop-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+    overflow: hidden;
+  }
+  #drop .drop-text strong { font-size: 14px; font-weight: 700; }
+  #drop .drop-text small  { font-size: 11px; color: var(--muted); }
+
+  /* ---------- Controls ---------- */
+  #controls {
+    display: none;
+    flex-wrap: wrap;
+    gap: 14px;
+    padding: 18px;
+    margin-bottom: 20px;
+    align-items: flex-end;
+  }
+  #controls .group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  #controls label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  #controls input {
+    width: 100px;
+    padding: 8px 10px;
+    font-size: 14px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--r-sm);
+    outline: none;
+    transition: border-color .15s ease;
+  }
+  #controls input:focus-visible { border-color: var(--accent); }
+
+  /* ---------- Buttons ---------- */
+  button.primary {
+    padding: 10px 18px;
+    border: none;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 14px;
+    color: #0a0e1a;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 8px 20px rgba(34,139,238,0.35);
+    transition: transform .1s ease, box-shadow .2s ease;
+  }
+  button.primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(34,139,238,0.45);
+  }
+  button.primary:active { transform: translateY(0); }
+  button.primary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ---------- Stats ---------- */
+  #stats {
+    display: none;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(400px 100px at 0% 0%, rgba(34,139,238,0.12), transparent 60%);
+    pointer-events: none;
+  }
+  .stat .label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .stat .value {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .stat .total {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+  }
+  .stat .total::before {
+    content: "Σ ";
+    opacity: 0.6;
+  }
+  .stat .value.accent {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .stat .value.bad  { color: var(--bad); }
+  .stat .value.good { color: var(--good); }
+
+  /* ---------- Plots ---------- */
+  .plot-card {
+    padding: 10px;
+    margin-bottom: 20px;
+  }
+  .plot-title {
+    padding: 8px 14px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  #speed, #track { width: 100%; }
+  #speed { height: 380px; }
+  #track { height: 520px; }
+
+  /* ---------- Footer ---------- */
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width: 820px) {
+    header {
+      grid-template-columns: 1fr;
+      text-align: center;
+    }
+    header .brand,
+    header .tag,
+    #drop {
+      justify-self: center;
+    }
+    #drop { width: 100%; }
+    .brand { justify-content: center; }
+  }
+</style>
+
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <img class="logo-img" src="data:image/png;base64,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" alt="GPX Logo">
+    <div class="brand-text">
+      <strong>Wingfoil Analyzer</strong>
+      <small>GPX Session Inspector</small>
+    </div>
+  </div>
+
+  <div id="drop">
+    <span class="drop-icon">📂</span>
+    <span class="drop-text">
+      <strong>GPX ablegen</strong>
+      <small>oder klicken zum Auswählen</small>
+    </span>
+  </div>
+
+  <span class="tag">100% lokal · keine Uploads</span>
+</header>
+
+<input type="file" id="file" accept=".gpx" style="display:none">
+
+<div id="controls" class="card">
+  <div class="group"><label>Sturz v&lt;</label><input type="number" id="crashV" value="3" step="0.5"></div>
+  <div class="group"><label>Sturz Dauer</label><input type="number" id="crashT" value="3" step="1"></div>
+  <div class="group"><label>Halse Turn °</label><input type="number" id="jTurn" value="110" step="5"></div>
+  <div class="group"><label>Halse Fenster s</label><input type="number" id="jWin" value="10" step="1"></div>
+  <div class="group"><label>Halse v_min</label><input type="number" id="jV" value="7" step="0.5"></div>
+  <div class="group"><label>Halse Gap s</label><input type="number" id="jGap" value="12" step="1"></div>
+  <button id="recalc" class="primary">Neu berechnen</button>
+</div>
+
+<div id="stats"></div>
+
+<div class="plot-card card">
+  <div class="plot-title">Geschwindigkeitsprofil</div>
+  <div id="speed"></div>
+</div>
+
+<div class="plot-card card">
+  <div class="plot-title">Track</div>
+  <div id="track"></div>
+</div>
+
+<footer>Drag & Drop · Plotly · Vanilla JS</footer>
+
+<script>
+  const CSS = getComputedStyle(document.documentElement);
+  const COLORS = {
+    accent:   CSS.getPropertyValue('--accent').trim(),
+    accent2:  CSS.getPropertyValue('--accent-2').trim(),
+    good:     CSS.getPropertyValue('--good').trim(),
+    bad:      CSS.getPropertyValue('--bad').trim(),
+    text:     CSS.getPropertyValue('--text').trim(),
+    muted:    CSS.getPropertyValue('--muted').trim(),
+  };
+
+  function withAlpha(hex, a) {
+    const h = hex.replace('#','');
+    const r = parseInt(h.substr(0,2),16);
+    const g = parseInt(h.substr(2,2),16);
+    const b = parseInt(h.substr(4,2),16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+// ============================================================
+//  GPX parsen
+// ============================================================
+function parseGPX(xmlText) {
+  const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+  const pts = [...doc.getElementsByTagName("trkpt")];
+  return pts.map(p => ({
+    lat: parseFloat(p.getAttribute("lat")),
+    lon: parseFloat(p.getAttribute("lon")),
+    time: new Date(p.getElementsByTagName("time")[0].textContent)
+  }));
+}
+
+// ============================================================
+//  Geo-Helfer
+// ============================================================
+const R = 6371000;
+const toRad = d => d * Math.PI / 180;
+const toDeg = r => r * 180 / Math.PI;
+
+function haversine(a, b) {
+  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
+  const la1 = toRad(a.lat), la2 = toRad(b.lat);
+  const x = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+function bearing(a, b) {
+  const la1 = toRad(a.lat), la2 = toRad(b.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const y = Math.sin(dLon) * Math.cos(la2);
+  const x = Math.cos(la1)*Math.sin(la2) - Math.sin(la1)*Math.cos(la2)*Math.cos(dLon);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+function angleDiff(a, b) {
+  let d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+// ============================================================
+//  Analyse
+// ============================================================
+function analyze(points, cfg) {
+  const n = points.length;
+  const t0 = points[0].time;
+  const times = points.map(p => (p.time - t0) / 1000);
+  const speeds = new Array(n).fill(0);
+  const bearings = new Array(n).fill(0);
+
+  for (let i = 1; i < n; i++) {
+    const dt = times[i] - times[i-1];
+    const d = haversine(points[i-1], points[i]);
+    speeds[i] = dt > 0 ? (d/dt) * 3.6 : 0;
+    bearings[i] = bearing(points[i-1], points[i]);
+  }
+  bearings[0] = bearings[1] || 0;
+
+  const smooth = arr => arr.map((_,i) => {
+    const lo = Math.max(0, i-2), hi = Math.min(arr.length, i+3);
+    let s = 0; for (let k=lo; k<hi; k++) s += arr[k];
+    return s / (hi - lo);
+  });
+  const vSm = smooth(speeds);
+
+  const crashes = [];
+  let startIdx = null;
+  for (let i = 0; i < n; i++) {
+    if (vSm[i] < cfg.crashV) {
+      if (startIdx === null) startIdx = i;
+    } else {
+      if (startIdx !== null && times[i-1] - times[startIdx] >= cfg.crashT)
+        crashes.push({ from: startIdx, to: i-1 });
+      startIdx = null;
+    }
+  }
+  if (startIdx !== null && times[n-1] - times[startIdx] >= cfg.crashT)
+    crashes.push({ from: startIdx, to: n-1 });
+
+  const half = cfg.jWin / 2;
+  const candidates = [];
+  for (let i = 0; i < n; i++) {
+    const t = times[i];
+    let lo = i; while (lo > 0 && t - times[lo-1] <= half) lo--;
+    let hi = i; while (hi < n-1 && times[hi+1] - t <= half) hi++;
+    if (hi - lo < 2) continue;
+    const turn = angleDiff(bearings[lo], bearings[hi]);
+    let minV = Infinity;
+    for (let k = lo; k <= hi; k++) if (vSm[k] < minV) minV = vSm[k];
+    if (turn >= cfg.jTurn && minV >= cfg.jV)
+      candidates.push({ i, turn, minV });
+  }
+
+  const jibes = [];
+  if (candidates.length) {
+    let cluster = [candidates[0]];
+    const flush = () => jibes.push(cluster.reduce((a,b) => b.turn > a.turn ? b : a));
+    for (let k = 1; k < candidates.length; k++) {
+      if (times[candidates[k].i] - times[cluster[cluster.length-1].i] <= cfg.jGap)
+        cluster.push(candidates[k]);
+      else { flush(); cluster = [candidates[k]]; }
+    }
+    flush();
+  }
+
+  return { times, speeds: vSm, crashes, jibes };
+}
+
+// ============================================================
+//  Plot-Theme
+// ============================================================
+const THEME = {
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor:  'rgba(0,0,0,0)',
+  font: { family: 'Inter, sans-serif', color: COLORS.text, size: 12 },
+  xaxis: { gridcolor: 'rgba(255,255,255,0.06)', zerolinecolor: 'rgba(255,255,255,0.1)', linecolor: 'rgba(255,255,255,0.1)' },
+  yaxis: { gridcolor: 'rgba(255,255,255,0.06)', zerolinecolor: 'rgba(255,255,255,0.1)', linecolor: 'rgba(255,255,255,0.1)' },
+  margin: { t: 30, r: 20, b: 50, l: 60 },
+  hoverlabel: { bgcolor: '#1a2030', bordercolor: COLORS.accent, font: { color: COLORS.text } }
+};
+const PLOT_CFG = { displaylogo: false, responsive: true,
+                   modeBarButtonsToRemove: ['lasso2d'] };
+
+// ============================================================
+//  State
+// ============================================================
+let POINTS = null, DATA = null;
+
+function fmt(sec) {
+  const m = Math.floor(sec/60), s = Math.floor(sec%60);
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function computeStatsObj(fromT, toT) {
+  if (!DATA) return null;
+  const { times, speeds, crashes, jibes } = DATA;
+  if (fromT == null) fromT = times[0];
+  if (toT   == null) toT   = times[times.length - 1];
+
+  const idx = [];
+  for (let i = 0; i < times.length; i++)
+    if (times[i] >= fromT && times[i] <= toT) idx.push(i);
+  if (!idx.length) return null;
+
+  const sp = idx.map(i => speeds[i]);
+  let dist = 0;
+  for (let k = 1; k < idx.length; k++)
+    if (idx[k] === idx[k-1]+1) dist += haversine(POINTS[idx[k-1]], POINTS[idx[k]]);
+  const nC = crashes.filter(c => times[c.from] >= fromT && times[c.from] <= toT).length;
+  const nJ = jibes.filter(j => times[j.i] >= fromT && times[j.i] <= toT).length;
+
+  return {
+    dauer: fmt(toT - fromT),
+    dist: (dist/1000).toFixed(2) + ' km',
+    vMax: Math.max(...sp).toFixed(1) + ' km/h',
+    vAvg: (sp.reduce((a,b)=>a+b,0)/sp.length).toFixed(1) + ' km/h',
+    nC, nJ
+  };
+}
+
+function renderStats(fromT, toT) {
+  const el = document.getElementById('stats');
+
+  // Session-Total = immer komplette Session (null, null oder deine Grenzen)
+  const total = computeStatsObj(null, null);  // oder: computeStatsObj(tMin, tMax)
+  if (!total) return;
+
+  // Selection: nur wenn fromT/toT gesetzt und != Session-Grenzen
+  const hasSelection = fromT != null && toT != null;
+  const sel = hasSelection ? computeStatsObj(fromT, toT) : null;
+
+  // Hauptwerte: Selection wenn vorhanden, sonst Total
+  const s = sel ?? total;
+
+  // Sub-Zeile mit Session-Total (nur wenn Selection aktiv)
+  const sub = (key) => hasSelection
+    ? `<span class="total">${total[key]}</span>`
+    : '';
+
+  el.style.display = 'grid';
+  el.innerHTML = `
+    <div class="stat card">
+      <span class="label">Dauer</span>
+      <span class="value">${s.dauer}</span>
+      ${sub('dauer')}
+    </div>
+    <div class="stat card">
+      <span class="label">Distanz</span>
+      <span class="value">${s.dist}</span>
+      ${sub('dist')}
+    </div>
+    <div class="stat card">
+      <span class="label">v<sub>max</sub></span>
+      <span class="value accent">${s.vMax}</span>
+      ${sub('vMax')}
+    </div>
+    <div class="stat card">
+      <span class="label">v<sub>avg</sub></span>
+      <span class="value">${s.vAvg}</span>
+      ${sub('vAvg')}
+    </div>
+    <div class="stat card">
+      <span class="label">Stürze</span>
+      <span class="value bad">${s.nC}</span>
+      ${sub('nC')}
+    </div>
+    <div class="stat card">
+      <span class="label">Halsen</span>
+      <span class="value good">${s.nJ}</span>
+      ${sub('nJ')}
+    </div>
+  `;
+}
+
+
+// ============================================================
+//  Plotten
+// ============================================================
+function render() {
+  const { times, speeds, crashes, jibes } = DATA;
+  const tMin = times.map(t => t/60);
+
+  const speedTraces = [{
+    x: tMin, y: speeds, type: 'scatter', mode: 'lines',
+    line: { color: COLORS.accent, width: 1.6, shape: 'spline' },
+    fill: 'tozeroy', fillcolor: withAlpha(COLORS.accent, 0.12),
+    name: 'Speed',
+    hovertemplate: '%{x:.2f} min<br><b>%{y:.1f} km/h</b><extra></extra>'
+  }, {
+    x: jibes.map(j => times[j.i]/60),
+    y: jibes.map(j => speeds[j.i]),
+    mode: 'markers', type: 'scatter',
+    marker: { symbol: 'triangle-down', size: 12, color: COLORS.good,
+              line: { color: '#0a0e1a', width: 1.5 } },
+    name: 'Halsen',
+    text: jibes.map(j => `${j.turn.toFixed(0)}° @ ${j.minV.toFixed(1)} km/h`),
+    hovertemplate: '%{x:.2f} min<br>%{text}<extra></extra>'
+  }];
+  const shapes = crashes.map(c => ({
+    type: 'rect', xref: 'x', yref: 'paper',
+    x0: times[c.from]/60, x1: times[c.to]/60, y0: 0, y1: 1,
+    fillcolor: withAlpha(COLORS.bad, 0.18),
+    line: { color: withAlpha(COLORS.bad, 0.5), width: 1 }
+  }));
+
+  Plotly.newPlot('speed', speedTraces, {
+    ...THEME,
+    xaxis: { ...THEME.xaxis, title: 'Zeit [min]' },
+    yaxis: { ...THEME.yaxis, title: 'km/h' },
+    shapes, dragmode: 'select',
+    showlegend: true,
+    legend: { bgcolor: 'rgba(0,0,0,0)', font: { color: COLORS.text } }
+  }, PLOT_CFG);
+
+  Plotly.newPlot('track', buildTrackTraces(times[0], times[times.length-1]),
+    trackLayout(), { ...PLOT_CFG, scrollZoom: true });
+
+  renderStats(null, null);
+
+  document.getElementById('speed').on('plotly_selected', ev => {
+    if (!ev || !ev.range) return;
+    const [x0, x1] = ev.range.x.map(v => v*60);
+    updateSelection(x0, x1);
+  });
+  document.getElementById('speed').on('plotly_deselect', () => {
+    updateSelection(null, null);
+  });
+}
+
+function trackLayout() {
+  return {
+    ...THEME,
+    xaxis: { ...THEME.xaxis, title: 'Longitude', scaleanchor: 'y', scaleratio: 1 },
+    yaxis: { ...THEME.yaxis, title: 'Latitude' },
+    showlegend: true,
+    legend: { bgcolor: 'rgba(0,0,0,0)', font: { color: COLORS.text } }
+  };
+}
+
+function buildTrackTraces(fromT, toT) {
+  const { times, jibes } = DATA;
+  const selLon = [], selLat = [];
+  for (let i = 0; i < times.length; i++) {
+    if (times[i] >= fromT && times[i] <= toT) {
+      selLon.push(POINTS[i].lon); selLat.push(POINTS[i].lat);
+    }
+  }
+  const jIn = jibes.filter(j => times[j.i] >= fromT && times[j.i] <= toT);
+  return [
+    { x: POINTS.map(p => p.lon), y: POINTS.map(p => p.lat),
+      mode:'lines', type:'scatter',
+      line:{ color:'rgba(255,255,255,0.15)', width:1 },
+      name:'Gesamt', hoverinfo:'skip' },
+    { x: selLon, y: selLat, mode:'lines', type:'scatter',
+      line:{ color: COLORS.accent, width:2.5, shape: 'spline' },
+      name:'Auswahl', hoverinfo:'skip' },
+    { x: jIn.map(j => POINTS[j.i].lon), y: jIn.map(j => POINTS[j.i].lat),
+      mode:'markers', type:'scatter',
+      marker:{ symbol:'triangle-down', size:12, color: COLORS.good,
+               line:{ color:'#0a0e1a', width:1.5 } },
+      name:'Halsen', hoverinfo:'skip' }
+  ];
+}
+
+function updateSelection(fromT, toT) {
+  if (fromT == null) fromT = DATA.times[0];
+  if (toT   == null) toT   = DATA.times[DATA.times.length - 1];
+  Plotly.react('track', buildTrackTraces(fromT, toT), trackLayout(),
+               { ...PLOT_CFG, scrollZoom: true });
+  // renderStats bekommt die originalen (evtl. null) Werte:
+  renderStats(
+    fromT === DATA.times[0] && toT === DATA.times[DATA.times.length-1] ? null : fromT,
+    fromT === DATA.times[0] && toT === DATA.times[DATA.times.length-1] ? null : toT
+  );
+}
+
+// ============================================================
+//  Datei-Handling
+// ============================================================
+function getConfig() {
+  return {
+    crashV: parseFloat(crashV.value), crashT: parseFloat(crashT.value),
+    jTurn:  parseFloat(jTurn.value),  jWin:   parseFloat(jWin.value),
+    jV:     parseFloat(jV.value),     jGap:   parseFloat(jGap.value)
+  };
+}
+
+function process(text) {
+  POINTS = parseGPX(text);
+  if (POINTS.length < 2) { alert("Keine Trackpunkte gefunden"); return; }
+  DATA = analyze(POINTS, getConfig());
+  document.getElementById('controls').style.display = 'flex';
+  render();
+}
+
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('hover'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('hover'));
+drop.addEventListener('drop', e => {
+  e.preventDefault(); drop.classList.remove('hover');
+  const f = e.dataTransfer.files[0]; if (f) f.text().then(process);
+});
+fileInput.addEventListener('change', e => {
+  const f = e.target.files[0]; if (f) f.text().then(process);
+});
+document.getElementById('recalc').addEventListener('click', () => {
+  if (POINTS) { DATA = analyze(POINTS, getConfig()); render(); }
+});
+</script>
+</body>
+</html>
